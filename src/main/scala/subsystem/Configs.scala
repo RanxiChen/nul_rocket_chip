@@ -627,3 +627,30 @@ class WithCloneRocketTiles(n: Int = 1, cloneHart: Int = 0, overrideIdOffset: Opt
   }
 })
 
+
+class WithMemoryDataBits(dataBits: Int) extends Config((site, here, up) => {
+  case MemoryBusKey => up(MemoryBusKey, site).copy(beatBytes = dataBits/8)
+})
+
+class WithLitexMemPort extends Config((site, here, up) => {
+  case ExtMem => Some(MemoryPortParams(MasterPortParams(
+                      base = x"8000_0000",
+                      size = x"8000_0000",
+                      beatBytes = site(MemoryBusKey).beatBytes,
+                      idBits = 4), 1))
+})
+
+class WithLitexMMIOPort extends Config((site, here, up) => {
+  case ExtBus => Some(MasterPortParams(
+                      base = x"1000_0000",
+                      size = x"7000_0000",
+                      beatBytes = site(SystemBusKey).beatBytes,
+                      idBits = 4))
+})
+
+class WithLitexSlavePort extends Config((site, here, up) => {
+  case ExtIn  => Some(SlavePortParams(
+                      beatBytes = site(SystemBusKey).beatBytes,
+                      idBits = 8,
+                      sourceBits = 4))
+})
