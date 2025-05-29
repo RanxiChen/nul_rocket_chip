@@ -13,6 +13,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.subsystem.TileCrossingParamsLike
 import freechips.rocketchip.util._
 import freechips.rocketchip.prci.{ClockSinkParameters}
+import chisel3.dontTouch
 
 case class RocketTileBoundaryBufferParams(force: Boolean = false)
 
@@ -125,6 +126,8 @@ class RocketTileModuleImp(outer: RocketTile) extends BaseTileModuleImp(outer)
   Annotated.params(this, outer.rocketParams)
 
   val core = Module(new Rocket(outer)(outer.p))
+  dontTouch(core.io.nulrxd)
+  dontTouch(core.io.nultxd)
 
   // Report unrecoverable error conditions; for now the only cause is cache ECC errors
   outer.reportHalt(List(outer.dcache.module.io.errors))

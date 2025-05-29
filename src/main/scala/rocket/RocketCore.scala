@@ -12,6 +12,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.util.property
 import freechips.rocketchip.scie._
 import scala.collection.mutable.ArrayBuffer
+import chisel3.VecInit
 
 case class RocketCoreParams(
   bootFreqHz: BigInt = 0,
@@ -286,7 +287,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   val id_expanded_inst = ibuf.io.inst.map(_.bits.inst)
   val id_raw_inst = ibuf.io.inst.map(_.bits.raw)
   val id_inst = id_expanded_inst.map(_.bits)
-  ibuf.io.imem <> io.imem.resp
+  //ibuf.io.imem <> io.imem.resp
   ibuf.io.kill := take_pc
 
   require(decodeWidth == 1 /* TODO */ && retireWidth == decodeWidth)
@@ -294,6 +295,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   require(!(coreParams.useRVE && coreParams.useHypervisor), "Can't select both RVE and Hypervisor")
   val id_ctrl = Wire(new IntCtrlSigs(aluFn)).decode(id_inst(0), decode_table)
   val lgNXRegs = if (coreParams.useRVE) 4 else 5
+  println(s"useRVE:${coreParams.useRVE}")
   val regAddrMask = (1 << lgNXRegs) - 1
 
   def decodeReg(x: UInt) = (x.extract(x.getWidth-1, lgNXRegs).asBool, x(lgNXRegs-1, 0))
@@ -1013,6 +1015,99 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   coreMonitorBundle.inst := csr.io.trace(0).insn
   coreMonitorBundle.excpt := csr.io.trace(0).exception
   coreMonitorBundle.priv_mode := csr.io.trace(0).priv
+  //****************************************************************************
+  val nulctrl = Module(new freechips.rocketchip.nulctrl.NulCPUCtrlWithUart(125000000,115200))
+
+  val _nul_stop_fetch_r1 = RegNext(nulctrl.io.cpu.stop_fetch, false.B)
+  val _nul_stop_fetch_r2 = RegNext(_nul_stop_fetch_r1, false.B)
+  val _nul_stop_fetch_r3 = RegNext(_nul_stop_fetch_r2, false.B)
+  val _nul_stop_fetch = _nul_stop_fetch_r1 || _nul_stop_fetch_r2 || _nul_stop_fetch_r3 || nulctrl.io.cpu.stop_fetch
+
+  val _nul_ifu_invoke_data = Wire(new FrontendResp())
+  _nul_ifu_invoke_data := 0.U.asTypeOf(new FrontendResp())
+
+  val _nul_pc_offset = (512.U(39.W))
+  val _nul_inst_queue = RegInit(VecInit(Seq.fill(24/fetchWidth)(VecInit(Seq.fill(fetchWidth)(("h00000013".U)(32.W))))))
+  val _nul_reg_flush0 = RegNext(nulctrl.io.cpu.inst64_flush, false.B) //
+  val _nul_push_pos = RegInit(0.U(5.W)) //
+ 
+  
+  val _nul_state = RegInit(0.U(1.W)) //
+  val _nul_current_pos = RegInit(0.U(5.W)) //
+  val _nul_inst_req = Wire(Bool())
+  val _nul_inst_req_addr = Wire(UInt(39.W))
+  val _nul_invoke_valid = (_nul_state === 1.U) && (_nul_current_pos <= _nul_push_pos)
+  val _nul_invoke_ready = Wire(Bool())
+  val __tmp_line = _nul_inst_queue(_nul_current_pos / fetchWidth.U)
+  val __tmp_offset = (_nul_current_pos % fetchWidth.U)
+  val __tmp_data = VecInit(Seq.fill(fetchWidth)(("h00000013".U)(32.W)))
+    for(i <- 0 until fetchWidth) {
+      when(__tmp_offset + i.U < fetchWidth.U) {
+        __tmp_data(i) := __tmp_line(__tmp_offset + i.U)
+      }
+    }
+  _nul_ifu_invoke_data.data := __tmp_data.asUInt
+  _nul_ifu_invoke_data.pc := _nul_pc_offset + (_nul_current_pos << 2)
+  _nul_ifu_invoke_data.mask := "hffffffff".U
+  _nul_inst_req := io.imem.req.valid 
+  _nul_inst_req_addr := io.imem.req.bits.pc 
+
+  val _nul_commited_pc = RegInit(0.U(32.W))
+
+  val _nul_core_busy = ibuf.io.inst(0).valid || ex_reg_valid || mem_reg_valid || wb_reg_valid
+  // val _nul_invoke_busy = (_nul_current_pos < _nul_push_pos)
+  val _nul_invoke_busy = (_nul_commited_pc + 4.U < _nul_pc_offset + 4.U * _nul_push_pos)
+  val _nul_busy = _nul_core_busy || _nul_invoke_busy
+
+  when(((_nul_state === 1.U) && (!_nul_busy)) || (!_nul_stop_fetch)) {
+    _nul_state := 0.U
+    _nul_push_pos := 0.U
+    _nul_commited_pc := _nul_pc_offset - 4.U
+    for(i <- 0 until 24/fetchWidth) for(j <- 0 until fetchWidth) _nul_inst_queue(i)(j) := ("h00000013".U)(32.W)
+  }.elsewhen(_nul_state === 0.U) {
+    when(nulctrl.io.cpu.inst64) {
+      _nul_inst_queue(_nul_push_pos / fetchWidth.U)(_nul_push_pos % fetchWidth.U) := nulctrl.io.cpu.inst64_raw
+      _nul_push_pos := _nul_push_pos + 1.U
+    }.elsewhen(nulctrl.io.cpu.inst64_flush) {
+      _nul_state := 1.U
+      _nul_current_pos := 0.U
+      _nul_commited_pc := _nul_pc_offset - 4.U
+    }
+  }.elsewhen(_nul_state === 1.U) {
+    when(_nul_inst_req) {
+      _nul_current_pos := ((_nul_inst_req_addr - _nul_pc_offset) >> 2)
+    }.elsewhen(_nul_current_pos <= _nul_push_pos && _nul_invoke_ready) { 
+      _nul_current_pos := fetchWidth.U * ((_nul_current_pos / fetchWidth.U) + 1.U)
+    }
+    when(wb_reg_valid && !(take_pc_wb && (io.imem.req.bits.pc(31,0) <= _nul_commited_pc + 4.U))) {
+      _nul_commited_pc := wb_reg_pc
+    }
+  }
+
+  nulctrl.io.cpu.inst64_ready := true.B 
+  nulctrl.io.cpu.inst64_busy := _nul_busy || (!_nul_reg_flush0)
+  
+  ibuf.io.imem.bits := Mux(_nul_stop_fetch, _nul_ifu_invoke_data, io.imem.resp.bits)
+  ibuf.io.imem.valid := Mux(_nul_stop_fetch, _nul_invoke_valid, io.imem.resp.valid)
+
+  io.imem.resp.ready := (!_nul_stop_fetch) && ibuf.io.imem.ready
+  
+  _nul_invoke_ready := ibuf.io.imem.ready
+
+  io.imem.nul_stop_fetch := _nul_stop_fetch 
+
+  nulctrl.io.cpu.priv := csr.io.status.prv
+
+  nulctrl.io.cpu.regacc_rdata := 0.U
+  nulctrl.io.cpu.regacc_busy := false.B
+  when(nulctrl.io.cpu.regacc_wt) {
+    rf.write(nulctrl.io.cpu.regacc_idx, nulctrl.io.cpu.regacc_wdata)
+  }.elsewhen(nulctrl.io.cpu.regacc_rd){
+    nulctrl.io.cpu.regacc_rdata := rf.aux_read(nulctrl.io.cpu.regacc_idx)
+  }
+
+  nulctrl.io.rxd := io.nulrxd
+  io.nultxd := nulctrl.io.txd
 
   if (enableCommitLog) {
     val t = csr.io.trace(0)
@@ -1136,6 +1231,9 @@ class RegFile(n: Int, w: Int, zero: Boolean = false) {
     reads += addr -> Wire(UInt())
     reads.last._2 := Mux(zero.B && addr === 0.U, 0.U, access(addr))
     reads.last._2
+  }
+  def aux_read(addr: UInt) = {
+     Mux(zero.B && addr === 0.U,0.U,access(addr))
   }
   def write(addr: UInt, data: UInt) = {
     canRead = false

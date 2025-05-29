@@ -164,6 +164,8 @@ trait HasCoreIO extends HasTileParameters {
   val io = new CoreBundle()(p) {
     val hartid = UInt(hartIdLen.W).asInput
     val reset_vector = UInt(resetVectorLen.W).asInput
+    val nulrxd = Input(Bool())
+    val nultxd = Output(Bool())
     val interrupts = new CoreInterrupts().asInput
     val imem  = new FrontendIO
     val dmem = new HellaCacheIO
