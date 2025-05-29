@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util._
 
 class NulCPUBundle extends Bundle {
+    val inited          = Input (Bool())
     val priv            = Input (UInt(2.W))     // 核心实时的特权级状态（U:0, S:1, M:3）
     val ext_itr         = Output(Bool())        // 拉高时：触发核心外部中断
     val stop_fetch      = Output(Bool())        // 拉高时：核心停止向后端发送取到的指令，后端仅能接受由inst64接口注入的指令
@@ -38,9 +39,10 @@ class NulCPUCtrl() extends Module {
     io.tx.valid := false.B 
     io.tx.bits := 0.U 
 
-    val CPU_HALT = 0.U 
-    val CPU_ITR  = 1.U 
-    val CPU_USER = 2.U 
+    val CPU_INIT = 0.U 
+    val CPU_HALT = 1.U 
+    val CPU_ITR  = 2.U 
+    val CPU_USER = 3.U 
     val cpu_state = RegInit(0.U(2.W))
 
     io.cpu.ext_itr := false.B
@@ -67,7 +69,7 @@ class NulCPUCtrl() extends Module {
         eq_valid := true.B 
         cpu_state := CPU_ITR
     }
-    io.cpu.stop_fetch := (cpu_state =/= CPU_USER) || (last_priv === 0.U && io.cpu.priv =/= 0.U)
+    io.cpu.stop_fetch := (cpu_state === CPU_ITR) || (cpu_state === CPU_HALT) || (last_priv === 0.U && io.cpu.priv =/= 0.U)
     
     val is_sv48 = false
 
@@ -88,6 +90,7 @@ class NulCPUCtrl() extends Module {
     val SEROP_PGWT  = 14.U
     val SEROP_PGCP  = 15.U
     val SEROP_CLK   = 16.U
+    val SEROP_INST  = 20.U
 
     val STATE_INIT_WAIT     = 0.U 
     val STATE_DO_INIT       = 1.U
@@ -111,6 +114,7 @@ class NulCPUCtrl() extends Module {
     val STATE_PGWT          = 19.U 
     val STATE_PGCP          = 20.U 
     val STATE_SYNCI         = 21.U 
+    val STATE_INST          = 22.U 
 
     val state = RegInit(0.U(5.W))
     val trans_bytes = RegInit(0.U(10.W))
@@ -123,7 +127,7 @@ class NulCPUCtrl() extends Module {
     val oparg = RegInit(VecInit(Seq.fill(16)(0.U(8.W))))
     val retarg = RegInit(VecInit(Seq.fill(16)(0.U(8.W))))
 
-    when(state === STATE_INIT_WAIT && io.cpu.priv === 3.U) {
+    when(state === STATE_INIT_WAIT && io.cpu.inited) {
         state := STATE_DO_INIT
     }
 
@@ -137,6 +141,8 @@ class NulCPUCtrl() extends Module {
             trans_bytes := 2.U 
         }.elsewhen(rxop === SEROP_REGRD) {
             trans_bytes := 4.U 
+        }.elsewhen(rxop === SEROP_INST) {
+            trans_bytes := 6.U 
         }.elsewhen(rxop === SEROP_PGRD || rxop === SEROP_PGWT) {
             trans_bytes := 7.U 
         }.elsewhen(rxop === SEROP_REDIR || rxop === SEROP_MEMRD) {
@@ -160,16 +166,15 @@ class NulCPUCtrl() extends Module {
     when(state === STATE_RECV_ARG && trans_bytes === trans_pos) {
         trans_bytes := 0.U
         trans_pos := 0.U
+        state := STATE_SEND_HEAD
         switch(opcode) {
             is(SEROP_NEXT) { state := STATE_WAIT_NEXT }
             is(SEROP_HALT) {
                 io.cpu.ext_itr := true.B
                 cpu_state := CPU_HALT
-                state := STATE_SEND_HEAD
             }
             is(SEROP_ITR) {
                 io.cpu.ext_itr := true.B
-                state := STATE_SEND_HEAD
             }
             is(SEROP_MMU) { state := STATE_MMU }
             is(SEROP_REDIR) { state := STATE_REDIR }
@@ -185,11 +190,11 @@ class NulCPUCtrl() extends Module {
             is(SEROP_PGWT) { state := STATE_PGWT }
             is(SEROP_PGCP) { state := STATE_PGCP }
             is(SEROP_CLK) {
-                state := STATE_SEND_HEAD
                 for(i <- 0 to 7) {
                     retarg(i) := global_clk(i*8+7, i*8)
                 }
             }
+            is(SEROP_INST) { state := STATE_INST }
         }
     }.elsewhen(state === STATE_RECV_ARG && io.rx.valid) {
         oparg(trans_pos) := io.rx.bits
@@ -341,6 +346,16 @@ class NulCPUCtrl() extends Module {
         when(cnt(5)) {
             cnt := 1.U 
             state := STATE_RECV_HEAD
+            cpu_state := CPU_HALT
+        }
+    }
+
+    when(state === STATE_INST) {
+        when(cnt(0)) { invoke_inst(Cat(oparg(5), oparg(4), oparg(3), oparg(2))) }
+        when(cnt(1)) { wait_inst() }
+        when(cnt(2)) {
+            cnt := 1.U 
+            state := STATE_SEND_HEAD
         }
     }
 
