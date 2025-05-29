@@ -238,6 +238,12 @@ class ICacheBundle(val outer: ICache) extends CoreBundle()(outer.p) {
 
   /** I$ miss or ITIM access will still enable clock even [[ICache]] is asked to be gated. */
   val keep_clock_enabled = Output(Bool())
+  //*****************************************
+  val dbg_refill_valid = Output(Bool())
+  val dbg_refill_paddr =  Output(UInt(32.W))
+  val dbg_refill_one_beat = Output(Bool())
+  val dbg_d_done =  Output(Bool())
+  val dbg_refill_data = Output(UInt(64.W))
 }
 
 class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
@@ -624,6 +630,14 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val s2_report_uncorrectable_error = s2_scratchpad_hit && s2_data_decoded.uncorrectable && (s2_valid || (s2_slaveValid && !s1s2_full_word_write))
   /** ECC uncorrectable address, send to Bus Error Unit. */
   val s2_error_addr = scratchpadBase.map(base => Mux(s2_scratchpad_hit, base + s2_scratchpad_word_addr, 0.U)).getOrElse(0.U)
+
+  //****************************************
+
+  io.dbg_refill_valid := refill_valid 
+  io.dbg_refill_paddr := refill_paddr(31, 0)
+  io.dbg_refill_one_beat := refill_one_beat
+  io.dbg_d_done := d_done
+  io.dbg_refill_data := tl_out.d.bits.data(63, 0)
 
   // output signals
   outer.icacheParams.latency match {

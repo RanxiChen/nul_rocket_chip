@@ -294,6 +294,10 @@ abstract class BaseTile private (val crossing: ClockCrossingType, q: Parameters)
   /** Node for external consumers to source  a V1.0 instruction trace from the core. */
   val traceCoreNode: BundleBridgeOutwardNode[TraceCoreInterface] = traceCoreSourceNode
 
+  //***********************
+  val nul_portSourceNode = BundleBridgeSource(() => new freechips.rocketchip.nulctrl.nul_port)
+  val nul_portNode :BundleBridgeOutwardNode[freechips.rocketchip.nulctrl.nul_port] = nul_portSourceNode
+
   /** Node to broadcast collected trace sideband signals into the tile. */
   val traceAuxNexusNode = BundleBridgeNexus[TraceAux](default = Some(() => {
     val aux = Wire(new TraceAux)

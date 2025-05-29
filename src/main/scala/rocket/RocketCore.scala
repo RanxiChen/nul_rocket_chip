@@ -1115,7 +1115,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
    nulctrl.io.cpu.priv := csr.io.status.prv
   nulctrl.io.cpu.inited := io.imem._nul_curpc >= "h80000000".U
 
-  
+
   nulctrl.io.cpu.regacc_rdata := 0.U
   nulctrl.io.cpu.regacc_busy := false.B
   when(nulctrl.io.cpu.regacc_wt) {
@@ -1126,6 +1126,66 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
 
   nulctrl.io.rxd := io.nulrxd
   io.nultxd := nulctrl.io.txd
+  //****************************************************************************
+  io.nul_port.csr_io_status_mpp := csr.io.status.mpp
+  io.nul_port.csr_io_ptbr_mode := csr.io.ptbr.mode(3,0)//
+  io.nul_port.dbg_d_done := io.imem.dbg_d_done
+  io.nul_port.dbg_refill_data := io.imem.dbg_refill_data
+  io.nul_port.dbg_refill_one_beat := io.imem.dbg_refill_one_beat
+  io.nul_port.dbg_refill_paddr := io.imem.dbg_refill_paddr
+  io.nul_port.dbg_refill_valid := io.imem.dbg_refill_valid
+  io.nul_port.dmem_req_bits_addr := io.dmem.req.bits.addr(38,0)
+  io.nul_port.dmem_req_bits_dprv := io.dmem.req.bits.dprv(1,0)
+  io.nul_port.dmem_req_valid := io.dmem.req.valid
+  io.nul_port.dmem_resp_valid := io.dmem.resp.valid
+  io.nul_port.ex_pc_valid := ex_pc_valid
+  io.nul_port.ex_reg_pc := ex_reg_pc(38,0)
+  io.nul_port.ex_reg_replay := ex_reg_replay
+  io.nul_port.ex_reg_valid := ex_reg_valid
+  io.nul_port.ex_rs0 := ex_rs(0)
+  io.nul_port.ex_rs1 := ex_rs(1)
+  io.nul_port.ibuf_io_inst0_bits_raw := ibuf.io.inst(0).bits.raw
+  io.nul_port.ibuf_io_inst0_bits_replay := ibuf.io.inst(0).bits.replay
+  io.nul_port.ibuf_io_inst0_valid := ibuf.io.inst(0).valid
+  io.nul_port.icache_io_invalidate := io.imem.icache_io_invalidate
+  io.nul_port.icache_io_req_bits_addr := io.imem.icache_io_req_bits_addr
+  io.nul_port.icache_io_req_valid := io.imem.icache_io_req_valid
+  io.nul_port.icache_io_resp_bits_ae := io.imem.icache_io_resp_bits_ae
+  io.nul_port.icache_io_resp_bits_data := io.imem.icache_io_resp_bits_data
+  io.nul_port.icache_io_resp_valid := io.imem.icache_io_resp_valid
+  io.nul_port.icache_io_s1_paddr := io.imem.icache_io_s1_paddr
+  io.nul_port.imem_req_bits_pc := io.imem.req.bits.pc
+  io.nul_port.imem_resp_ready :=  io.imem.resp.ready 
+  io.nul_port.imem_resp_valid :=  io.imem.resp.valid 
+  io.nul_port.inst64 := nulctrl.io.cpu.inst64
+  io.nul_port.inst64_ready := nulctrl.io.cpu.inst64_ready 
+  io.nul_port.mem_misprediction := mem_misprediction
+  io.nul_port.mem_npc := mem_npc(38,0)
+  io.nul_port.mem_reg_inst := mem_reg_inst(31,0)
+  io.nul_port.mem_reg_load := mem_reg_load
+  io.nul_port.mem_reg_pc := mem_reg_pc(38,0)
+  io.nul_port.mem_reg_store := mem_reg_store
+  io.nul_port.mem_reg_valid := mem_reg_valid
+  io.nul_port.mem_reg_xcpt := mem_reg_xcpt
+  io.nul_port.nul_current_pos := _nul_current_pos
+  io.nul_port.nul_push_pos := _nul_push_pos
+  io.nul_port.nul_reg_flush0 := _nul_reg_flush0
+  io.nul_port.nul_state := _nul_state
+  io.nul_port.nul_stop_fetch := _nul_stop_fetch//
+  io.nul_port.rf_wdata := rf_wdata(63,0)
+  io.nul_port.rf_wen := rf_wen
+  io.nul_port.status_priv := csr.io.status.prv(1,0)
+  io.nul_port.take_pc_mem := take_pc_mem
+  io.nul_port.take_pc_wb := take_pc_wb
+  io.nul_port.tlb_io_req_bits_vaddr := io.imem.tlb_io_req_bits_vaddr
+  io.nul_port.tlb_io_req_valid := io.imem.tlb_io_req_valid
+  io.nul_port.tlb_io_resp_miss := io.imem.tlb_io_resp_miss
+  io.nul_port.tlb_io_resp_paddr := io.imem.tlb_io_resp_paddr
+  io.nul_port.wb_cause := wb_cause(4,0)
+  io.nul_port.wb_reg_valid := wb_reg_valid
+  io.nul_port.wb_valid := wb_valid
+  io.nul_port.wb_xcpt := wb_xcpt
+  //***************************************************************************
 
   if (enableCommitLog) {
     val t = csr.io.trace(0)

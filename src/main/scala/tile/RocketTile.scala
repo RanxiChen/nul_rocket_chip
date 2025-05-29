@@ -128,6 +128,7 @@ class RocketTileModuleImp(outer: RocketTile) extends BaseTileModuleImp(outer)
   val core = Module(new Rocket(outer)(outer.p))
   dontTouch(core.io.nulrxd)
   dontTouch(core.io.nultxd)
+  outer.nul_portSourceNode.bundle := core.io.nul_port
 
   // Report unrecoverable error conditions; for now the only cause is cache ECC errors
   outer.reportHalt(List(outer.dcache.module.io.errors))

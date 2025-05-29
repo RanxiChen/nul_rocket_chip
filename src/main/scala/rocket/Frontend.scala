@@ -12,6 +12,7 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import freechips.rocketchip.util.property
+import chisel3._
 
 class FrontendReq(implicit p: Parameters) extends CoreBundle()(p) {
   val pc = UInt(vaddrBitsExtended.W)
@@ -61,6 +62,23 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle()(p) {
   val progress = Output(Bool())
   //val nul_stop_fetch = Output(Bool())
   val _nul_curpc = Input(UInt(39.W))
+  val nul_stop_fetch = Output(Bool())
+  val tlb_io_req_valid = Input(Bool())
+  val tlb_io_req_bits_vaddr = Input(UInt(39.W))
+  val tlb_io_resp_paddr = Input(UInt(32.W))
+  val tlb_io_resp_miss =  Input(Bool())
+  val icache_io_req_valid = Input(Bool())
+  val icache_io_req_bits_addr = Input(UInt(32.W))
+  val icache_io_invalidate = Input(Bool())
+  val icache_io_s1_paddr = Input(UInt(32.W))
+  val icache_io_resp_valid = Input(Bool())
+  val icache_io_resp_bits_data = Input(UInt(32.W))
+  val icache_io_resp_bits_ae = Input(Bool())
+  val dbg_refill_valid =  Input(Bool())
+  val dbg_refill_paddr =  Input(UInt(32.W))
+  val dbg_refill_one_beat =  Input(Bool())
+  val dbg_d_done = Input(Bool())
+  val dbg_refill_data = Input(UInt(64.W))
 }
 
 class Frontend(val icacheParams: ICacheParams, staticIdForMetadataUseOnly: Int)(implicit p: Parameters) extends LazyModule {
@@ -194,6 +212,24 @@ class FrontendModule(outer: Frontend) extends LazyModuleImp(outer)
   fq.io.enq.bits.xcpt := s2_tlb_resp
   assert(!(s2_speculative && io.ptw.customCSRs.asInstanceOf[RocketCustomCSRs].disableSpeculativeICacheRefill && !icache.io.s2_kill))
   when (icache.io.resp.valid && icache.io.resp.bits.ae) { fq.io.enq.bits.xcpt.ae.inst := true.B }
+
+ //****************************************************************
+  io.cpu.tlb_io_req_valid := tlb.io.req.valid
+  io.cpu.tlb_io_req_bits_vaddr := tlb.io.req.bits.vaddr(38,0)
+  io.cpu.tlb_io_resp_paddr := tlb.io.resp.paddr(31,0)
+  io.cpu.tlb_io_resp_miss := tlb.io.resp.miss
+  io.cpu.dbg_refill_valid := icache.io.dbg_refill_valid
+  io.cpu.dbg_refill_paddr := icache.io.dbg_refill_paddr
+  io.cpu.dbg_refill_one_beat := icache.io.dbg_refill_one_beat
+  io.cpu.dbg_d_done := icache.io.dbg_d_done
+  io.cpu.dbg_refill_data := icache.io.dbg_refill_data
+  io.cpu.icache_io_req_valid := icache.io.req.valid
+  io.cpu.icache_io_req_bits_addr := icache.io.req.bits.addr(31,0)
+  io.cpu.icache_io_invalidate := icache.io.invalidate
+  io.cpu.icache_io_s1_paddr := icache.io.s1_paddr
+  io.cpu.icache_io_resp_valid := icache.io.resp.valid
+  io.cpu.icache_io_resp_bits_data := icache.io.resp.bits.data(31,0)
+  io.cpu.icache_io_resp_bits_ae := icache.io.resp.bits.ae
 
   if (usingBTB) {
     val btb = Module(new BTB)
