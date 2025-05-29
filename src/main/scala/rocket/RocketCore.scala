@@ -1027,7 +1027,8 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   _nul_ifu_invoke_data := 0.U.asTypeOf(new FrontendResp())
 
   val _nul_pc_offset = (512.U(39.W))
-  val _nul_inst_queue = RegInit(VecInit(Seq.fill(24/fetchWidth)(VecInit(Seq.fill(fetchWidth)(("h00000013".U)(32.W))))))
+  //val _nul_inst_queue = RegInit(VecInit(Seq.fill(24/fetchWidth)(VecInit(Seq.fill(fetchWidth)(("h00000013".U)(32.W))))))
+  val _nul_inst_queue = RegInit(VecInit(Seq.fill(24)(("h00000013".U)(32.W))))
   val _nul_reg_flush0 = RegNext(nulctrl.io.cpu.inst64_flush, false.B) //
   val _nul_push_pos = RegInit(0.U(5.W)) //
  
@@ -1038,19 +1039,24 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   val _nul_inst_req_addr = Wire(UInt(39.W))
   val _nul_invoke_valid = (_nul_state === 1.U) && (_nul_current_pos <= _nul_push_pos)
   val _nul_invoke_ready = Wire(Bool())
-  val __tmp_line = _nul_inst_queue(_nul_current_pos / fetchWidth.U)
-  val __tmp_offset = (_nul_current_pos % fetchWidth.U)
-  val __tmp_data = VecInit(Seq.fill(fetchWidth)(("h00000013".U)(32.W)))
-    for(i <- 0 until fetchWidth) {
-      when(__tmp_offset + i.U < fetchWidth.U) {
-        __tmp_data(i) := __tmp_line(__tmp_offset + i.U)
-      }
-    }
-  _nul_ifu_invoke_data.data := __tmp_data.asUInt
+  //val __tmp_line = _nul_inst_queue(_nul_current_pos / fetchWidth.U)
+  //val __tmp_offset = (_nul_current_pos % fetchWidth.U)
+  //val __tmp_data = VecInit(Seq.fill(fetchWidth)(("h00000013".U)(32.W)))
+  //  for(i <- 0 until fetchWidth) {
+  //    when(__tmp_offset + i.U < fetchWidth.U) {
+  //      __tmp_data(i) := __tmp_line(__tmp_offset + i.U)
+  //    }
+  //  }
+  //_nul_ifu_invoke_data.data := __tmp_data.asUInt
+  _nul_ifu_invoke_data.data := _nul_inst_queue(_nul_current_pos)
   _nul_ifu_invoke_data.pc := _nul_pc_offset + (_nul_current_pos << 2)
   _nul_ifu_invoke_data.mask := "hffffffff".U
-  _nul_inst_req := io.imem.req.valid 
-  _nul_inst_req_addr := io.imem.req.bits.pc 
+  //_nul_inst_req := io.imem.req.valid 
+  //_nul_inst_req_addr := io.imem.req.bits.pc 
+  _nul_inst_req := take_pc 
+  _nul_inst_req_addr := Mux(wb_xcpt || csr.io.eret, csr.io.evec, // exception or [m|s]ret
+                                Mux(replay_wb,              wb_reg_pc,   // replay
+                                mem_npc))    // flush or branch misprediction 
 
   val _nul_commited_pc = RegInit(0.U(32.W))
 
@@ -1063,10 +1069,12 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
     _nul_state := 0.U
     _nul_push_pos := 0.U
     _nul_commited_pc := _nul_pc_offset - 4.U
-    for(i <- 0 until 24/fetchWidth) for(j <- 0 until fetchWidth) _nul_inst_queue(i)(j) := ("h00000013".U)(32.W)
+    //for(i <- 0 until 24/fetchWidth) for(j <- 0 until fetchWidth) _nul_inst_queue(i)(j) := ("h00000013".U)(32.W)
+    for(i <- 0 until 24) _nul_inst_queue(i) := ("h00000013".U)(32.W)
   }.elsewhen(_nul_state === 0.U) {
     when(nulctrl.io.cpu.inst64) {
-      _nul_inst_queue(_nul_push_pos / fetchWidth.U)(_nul_push_pos % fetchWidth.U) := nulctrl.io.cpu.inst64_raw
+      //_nul_inst_queue(_nul_push_pos / fetchWidth.U)(_nul_push_pos % fetchWidth.U) := nulctrl.io.cpu.inst64_raw
+      _nul_inst_queue(_nul_push_pos) := nulctrl.io.cpu.inst64_raw
       _nul_push_pos := _nul_push_pos + 1.U
     }.elsewhen(nulctrl.io.cpu.inst64_flush) {
       _nul_state := 1.U
@@ -1077,7 +1085,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
     when(_nul_inst_req) {
       _nul_current_pos := ((_nul_inst_req_addr - _nul_pc_offset) >> 2)
     }.elsewhen(_nul_current_pos <= _nul_push_pos && _nul_invoke_ready) { 
-      _nul_current_pos := fetchWidth.U * ((_nul_current_pos / fetchWidth.U) + 1.U)
+      //_nul_current_pos := fetchWidth.U * ((_nul_current_pos / fetchWidth.U) + 1.U)
     }
     when(wb_reg_valid && !(take_pc_wb && (io.imem.req.bits.pc(31,0) <= _nul_commited_pc + 4.U))) {
       _nul_commited_pc := wb_reg_pc
@@ -1090,11 +1098,17 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   ibuf.io.imem.bits := Mux(_nul_stop_fetch, _nul_ifu_invoke_data, io.imem.resp.bits)
   ibuf.io.imem.valid := Mux(_nul_stop_fetch, _nul_invoke_valid, io.imem.resp.valid)
 
-  io.imem.resp.ready := (!_nul_stop_fetch) && ibuf.io.imem.ready
-  
-  _nul_invoke_ready := ibuf.io.imem.ready
+  //io.imem.resp.ready := (!_nul_stop_fetch) && ibuf.io.imem.ready
+  io.imem.resp.ready := (_nul_stop_fetch || ibuf.io.imem.ready)
+  when(_nul_stop_fetch) {
+    io.imem.req.valid := true.B
+    io.imem.req.bits.pc := 0.U 
+    io.imem.req.bits.speculative := false.B
+  }
+  //_nul_invoke_ready := ibuf.io.imem.ready
 
-  io.imem.nul_stop_fetch := _nul_stop_fetch 
+  //io.imem.nul_stop_fetch := _nul_stop_fetch 
+  _nul_invoke_ready := ibuf.io.imem.ready 
 
   nulctrl.io.cpu.priv := csr.io.status.prv
 
