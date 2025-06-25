@@ -79,6 +79,13 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle()(p) {
   val dbg_refill_one_beat =  Input(Bool())
   val dbg_d_done = Input(Bool())
   val dbg_refill_data = Input(UInt(64.W))
+  val dbg_s2_tlb_resp_ae_inst = Input(Bool())
+  val dbg_s2_tlb_resp_pf_inst = Input(Bool())
+  val dbg_s2_tlb_resp_gf_inst = Input(Bool())
+  val dbg_tlb_hits = Input(UInt(14.W))
+  val dbg_px_array = Input(UInt(14.W))
+  val dbg_final_ae_array = Input(UInt(14.W))
+  val dbg_ptw_ae_array = Input(UInt(14.W))
 }
 
 class Frontend(val icacheParams: ICacheParams, staticIdForMetadataUseOnly: Int)(implicit p: Parameters) extends LazyModule {
@@ -119,6 +126,9 @@ class FrontendModule(outer: Frontend) extends LazyModuleImp(outer)
   withClock (gated_clock) { // entering gated-clock domain
 
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBSets, nTLBWays, outer.icacheParams.nTLBBasePageSectors, outer.icacheParams.nTLBSuperpages)))
+  println(s"tlb use param lgMaxSize has value:${log2Ceil(fetchBytes)}")
+  println(s"tlb use  vaddrBitsExtended as ${vaddrBitsExtended}")
+  println(s"tlb use paddrBits as ${paddrBits}")
 
   val s1_valid = Reg(Bool())
   val s2_valid = RegInit(false.B)
@@ -230,6 +240,14 @@ class FrontendModule(outer: Frontend) extends LazyModuleImp(outer)
   io.cpu.icache_io_resp_valid := icache.io.resp.valid
   io.cpu.icache_io_resp_bits_data := icache.io.resp.bits.data(31,0)
   io.cpu.icache_io_resp_bits_ae := icache.io.resp.bits.ae
+  io.cpu.dbg_s2_tlb_resp_ae_inst := s2_tlb_resp.ae.inst
+  io.cpu.dbg_s2_tlb_resp_gf_inst := s2_tlb_resp.gf.inst
+  io.cpu.dbg_s2_tlb_resp_pf_inst := s2_tlb_resp.pf.inst
+  io.cpu.dbg_final_ae_array := tlb.io.dbg.final_ae_array
+  io.cpu.dbg_ptw_ae_array := tlb.io.dbg.ptw_ae_array
+  io.cpu.dbg_px_array := tlb.io.dbg.px_array
+  io.cpu.dbg_tlb_hits := tlb.io.dbg.hits
+ 
 
   if (usingBTB) {
     val btb = Module(new BTB)

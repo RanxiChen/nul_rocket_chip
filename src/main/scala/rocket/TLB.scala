@@ -304,6 +304,14 @@ case class TLBConfig(
   * @param cfg [[TLBConfig]]
   * @param edge collect SoC metadata.
   */
+
+class TLB_dbg_Bundle extends Bundle {
+  val hits = UInt(14.W)
+  val px_array = UInt(14.W)
+  val ptw_ae_array = UInt(14.W)
+  val final_ae_array = UInt(14.W)
+}
+
 class TLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge: TLEdgeOut, p: Parameters) extends CoreModule()(p) {
   val io = IO(new Bundle {
     /** request from Core */
@@ -316,6 +324,7 @@ class TLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge: T
     val ptw = new TLBPTWIO
     /** suppress a TLB refill, one cycle after a miss */
     val kill = Input(Bool())
+    val dbg = Output(new TLB_dbg_Bundle)
   })
 
   val pageGranularityPMPs = pmpGranularity >= (1 << pgIdxBits)
@@ -430,6 +439,8 @@ class TLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge: T
   val hitsVec = all_entries.map(vm_enabled && _.hit(vpn, priv_v))
   val real_hits = hitsVec.asUInt
   val hits = Cat(!vm_enabled, real_hits)
+  println(s"signal hits has length:${hits.getWidth}")
+  io.dbg.hits := hits(13,0)
 
   // use ptw response to refill
   // permission bit arrays
@@ -491,9 +502,11 @@ class TLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge: T
   val ppn = Mux1H(hitsVec :+ !vm_enabled, (all_entries zip entries).map{ case (entry, data) => entry.ppn(vpn, data) } :+ vpn(ppnBits-1, 0))
 
   val nPhysicalEntries = 1 + special_entry.size
+  println(s"nPyhysicalEntries has value :${nPhysicalEntries}")
   // generally PTW misaligned load exception.
   val ptw_ae_array = Cat(false.B, entries.map(_.ae_ptw).asUInt)
   val final_ae_array = Cat(false.B, entries.map(_.ae_final).asUInt)
+  println(s"final_ae_array has length:${final_ae_array.getWidth}")
   val ptw_pf_array = Cat(false.B, entries.map(_.pf).asUInt)
   val ptw_gf_array = Cat(false.B, entries.map(_.gf).asUInt)
   val sum = Mux(priv_v, io.ptw.gstatus.sum, io.ptw.status.sum)
@@ -534,6 +547,9 @@ class TLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge: T
   val paa_array_if_cached = paa_array | (if(usingAtomicsInCache) c_array else 0.U)
   val pal_array_if_cached = pal_array | (if(usingAtomicsInCache) c_array else 0.U)
   val prefetchable_array = Cat((cacheable && homogeneous) << (nPhysicalEntries-1), normal_entries.map(_.c).asUInt)
+  io.dbg.px_array := px_array(13,0)
+  io.dbg.final_ae_array := final_ae_array(13,0)
+  io.dbg.ptw_ae_array := ptw_ae_array(13,0)
 
   // vaddr misaligned: vaddr[1:0]=b00
   val misaligned = (io.req.bits.vaddr & (UIntToOH(io.req.bits.size) - 1.U)).orR
@@ -645,6 +661,7 @@ class TLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge: T
     val offset = Mux(io.resp.gpa_is_pte, r_gpa(pgIdxBits-1, 0), io.req.bits.vaddr(pgIdxBits-1, 0))
     Cat(page, offset)
   }
+  println(s"px_array has length:${px_array.getWidth}")
 
   io.ptw.req.valid := state === s_request
   io.ptw.req.bits.valid := !io.kill

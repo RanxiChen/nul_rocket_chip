@@ -1134,6 +1134,13 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   io.nul_port.dbg_refill_one_beat := io.imem.dbg_refill_one_beat
   io.nul_port.dbg_refill_paddr := io.imem.dbg_refill_paddr
   io.nul_port.dbg_refill_valid := io.imem.dbg_refill_valid
+  io.nul_port.dbg_s2_tlb_resp_ae_inst := io.imem.dbg_s2_tlb_resp_ae_inst
+  io.nul_port.dbg_s2_tlb_resp_gf_inst := io.imem.dbg_s2_tlb_resp_gf_inst
+  io.nul_port.dbg_s2_tlb_resp_pf_inst := io.imem.dbg_s2_tlb_resp_pf_inst
+  io.nul_port.dbg_tlb_hits := io.imem.dbg_tlb_hits
+  io.nul_port.dbg_final_ae_array := io.imem.dbg_final_ae_array
+  io.nul_port.dbg_ptw_ae_array := io.imem.dbg_ptw_ae_array
+  io.nul_port.dbg_px_array := io.imem.dbg_px_array
   io.nul_port.dmem_req_bits_addr := io.dmem.req.bits.addr(38,0)
   io.nul_port.dmem_req_bits_dprv := io.dmem.req.bits.dprv(1,0)
   io.nul_port.dmem_req_valid := io.dmem.req.valid
@@ -1185,6 +1192,8 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   io.nul_port.wb_reg_valid := wb_reg_valid
   io.nul_port.wb_valid := wb_valid
   io.nul_port.wb_xcpt := wb_xcpt
+
+  println(s"pglevel has value ${p(PgLevels)}")
   //***************************************************************************
 
   if (enableCommitLog) {
