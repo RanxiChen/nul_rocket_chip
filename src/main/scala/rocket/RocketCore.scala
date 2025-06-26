@@ -1017,7 +1017,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   coreMonitorBundle.priv_mode := csr.io.trace(0).priv
   //****************************************************************************
   val nulctrl = Module(new freechips.rocketchip.nulctrl.NulCPUCtrlWithUart(125000000,115200))
-  val _nul_fake_pc = 1000.U 
+  val _nul_fake_pc = "h80000000".U 
 
   val _nul_stop_fetch = nulctrl.io.cpu.stop_fetch 
 
@@ -1078,14 +1078,14 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   io.imem.resp.ready := (_nul_stop_fetch || ibuf.io.imem.ready)
   when(_nul_stop_fetch) {
     io.imem.req.valid := true.B
-    io.imem.req.bits.pc := 80000000.U 
+    io.imem.req.bits.pc := "h80000000".U 
     io.imem.req.bits.speculative := false.B
   }
 
   //nulctrl.io.cpu.priv := csr.io.status.prv
   //nulctrl.io.cpu.priv := Mux((io.imem._nul_curpc < "h10000000".U) || (io.imem._nul_curpc >= "h80000000".U), csr.io.status.prv, 0.U)
   nulctrl.io.cpu.priv := csr.io.status.prv
-  nulctrl.io.cpu.inited := false.B && io.imem._nul_curpc >= "h80000000".U
+  nulctrl.io.cpu.inited := io.imem._nul_curpc >= "h80000000".U
 
   nulctrl.io.cpu.regacc_rdata := 0.U
   nulctrl.io.cpu.regacc_busy := false.B
@@ -1099,6 +1099,11 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   io.nultxd := nulctrl.io.txd
 
   //****************************************************************************
+  io.nul_port.ibuf_io_imem_valid := ibuf.io.imem.valid
+  io.nul_port.ibuf_io_imem_bits_pc := ibuf.io.imem.bits.pc(39,0)
+  io.nul_port.ibuf_io_imem_bits_replay := ibuf.io.imem.bits.replay
+  io.nul_port.ibuf_io_imem_bits_btb_cfiType := ibuf.io.imem.bits.btb.cfiType(1,0)
+  
   io.nul_port.csr_io_status_mpp := csr.io.status.mpp
   io.nul_port.csr_io_ptbr_mode := csr.io.ptbr.mode(3,0)//
   io.nul_port.dbg_d_done := io.imem.dbg_d_done
@@ -1136,7 +1141,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   io.nul_port.imem_req_bits_pc := io.imem.req.bits.pc
   io.nul_port.imem_resp_ready :=  io.imem.resp.ready 
   io.nul_port.imem_resp_valid :=  io.imem.resp.valid 
-  io.nul_port.inst64 := nulctrl.io.cpu.inst64 || io.imem.flush_icache
+  io.nul_port.inst64 := nulctrl.io.cpu.inst64 || io.imem.sfence.valid
   io.nul_port.inst64_ready := nulctrl.io.cpu.inst64_ready 
   io.nul_port.mem_misprediction := mem_misprediction
   io.nul_port.mem_npc := mem_npc(38,0)

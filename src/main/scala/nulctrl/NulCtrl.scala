@@ -317,15 +317,19 @@ class NulCPUCtrl() extends Module {
     val def_pmp_addr = if(is_sv48) ("hffffffffffff".U(64.W)) else ("h7fffffffff".U(64.W))
 
     when(state === STATE_DO_INIT) {
-        when(cnt(0)) { write_reg(2, def_pmp_cfg) }
-        when(cnt(1)) { write_reg(3, def_pmp_addr) }
-        when(cnt(2)) { invoke_inst("h3a039073".U) } // csrrw x0, pmpcfg0, x7
-        when(cnt(3)) { invoke_inst("h3b041073".U) } // csrrw x0, pmpaddr0, x8
-        when(cnt(4)) { wait_inst() }
-        when(cnt(5)) {
+        when(cnt(0)) {
+            cpu_state := CPU_HALT
+            cnt := (cnt << 1.U)
+        }
+        when(cnt(1) || cnt(2) || cnt(3)) { cnt := (cnt << 1.U) }
+        when(cnt(4)) { write_reg(2, def_pmp_cfg) }
+        when(cnt(5)) { write_reg(3, def_pmp_addr) }
+        when(cnt(6)) { invoke_inst("h3a039073".U) } // csrrw x0, pmpcfg0, x7
+        when(cnt(7)) { invoke_inst("h3b041073".U) } // csrrw x0, pmpaddr0, x8
+        when(cnt(8)) { wait_inst() }
+        when(cnt(9)) {
             cnt := 1.U 
             state := STATE_RECV_HEAD
-            cpu_state := CPU_HALT
         }
     }
 
