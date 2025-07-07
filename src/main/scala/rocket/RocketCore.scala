@@ -1028,7 +1028,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   val _nul_invoke_working = RegInit(false.B)
   val _nul_invoke_finish = RegInit(false.B)
 
-  when(!_nul_invoke_working && nulctrl.io.cpu.inst64) {
+  when(!_nul_invoke_working && nulctrl.io.cpu.inst64 && (!_nul_invoke_finish)) {
     _nul_invoke_working := true.B 
     _nul_invoke_valid := true.B 
     _nul_invoke_inst := nulctrl.io.cpu.inst64_raw 
@@ -1042,13 +1042,14 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
     _nul_invoke_valid := true.B 
   }
 
+
   when(_nul_invoke_nowait && _nul_invoke_working && !_nul_invoke_valid) {
     _nul_invoke_finish := true.B 
     _nul_invoke_working := false.B 
   }
 
-  val _nul_pipeline_busy = _nul_invoke_valid || ex_reg_valid || mem_reg_valid || wb_reg_valid 
-  when(!_nul_invoke_nowait && _nul_invoke_working && !_nul_pipeline_busy) {
+  val _nul_pipeline_busy = _nul_invoke_valid || ex_reg_valid || mem_reg_valid 
+  when(!_nul_invoke_nowait && _nul_invoke_working && wb_reg_valid && !(take_pc && _take_pc_target === _nul_fake_pc) && !_nul_pipeline_busy) {
     _nul_invoke_finish := true.B 
     _nul_invoke_working := false.B 
   }
@@ -1138,10 +1139,10 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   io.nul_port.icache_io_resp_bits_data := io.imem.icache_io_resp_bits_data
   io.nul_port.icache_io_resp_valid := io.imem.icache_io_resp_valid
   io.nul_port.icache_io_s1_paddr := io.imem.icache_io_s1_paddr
-  io.nul_port.imem_req_bits_pc := io.imem.req.bits.pc
+  io.nul_port.imem_req_bits_pc := _take_pc_target
   io.nul_port.imem_resp_ready :=  io.imem.resp.ready 
   io.nul_port.imem_resp_valid :=  io.imem.resp.valid 
-  io.nul_port.inst64 := nulctrl.io.cpu.inst64 || io.imem.sfence.valid
+  io.nul_port.inst64 := nulctrl.io.cpu.inst64
   io.nul_port.inst64_ready := nulctrl.io.cpu.inst64_ready 
   io.nul_port.mem_misprediction := mem_misprediction
   io.nul_port.mem_npc := mem_npc(38,0)
