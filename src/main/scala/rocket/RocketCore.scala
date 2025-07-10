@@ -1017,7 +1017,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   coreMonitorBundle.excpt := csr.io.trace(0).exception
   coreMonitorBundle.priv_mode := csr.io.trace(0).priv
   //****************************************************************************
-  val nulctrl = Module(new freechips.rocketchip.nulctrl.NulCPUCtrlWithUart(100000000,2000000))
+  val nulctrl = Module(new freechips.rocketchip.nulctrl.NulCPUCtrlWithUart(100000000,115200))
   val _nul_fake_pc = "h80000000".U 
 
   val _nul_stop_fetch = nulctrl.io.cpu.stop_fetch 
