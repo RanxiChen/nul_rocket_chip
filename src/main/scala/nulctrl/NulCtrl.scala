@@ -6,6 +6,9 @@ import chisel3.util._
 
 class NulCPUCtrl() extends Module {
 
+    val is_sv48 = false
+    val is_hard_fp = true
+
     val io = IO(new Bundle {
         val cpu     = new NulCPUBundle()
         val tx      = new UartIO()
@@ -50,7 +53,6 @@ class NulCPUCtrl() extends Module {
     }
     io.cpu.stop_fetch := (cpu_state === CPU_ITR) || (cpu_state === CPU_HALT) || (last_priv === 0.U && io.cpu.priv =/= 0.U)
     
-    val is_sv48 = false
 
     val SEROP_NEXT  = 0.U
     val SEROP_HALT  = 1.U
@@ -69,6 +71,7 @@ class NulCPUCtrl() extends Module {
     val SEROP_PGWT  = 14.U
     val SEROP_PGCP  = 15.U
     val SEROP_CLK   = 16.U
+    val SEROP_UCLK  = 17.U
     val SEROP_INST  = 20.U
 
     val STATE_INIT_WAIT     = 0.U 
@@ -117,7 +120,7 @@ class NulCPUCtrl() extends Module {
         opcode := rxop
         opoff := rxoff
 
-        when(rxop === SEROP_HALT || rxop === SEROP_ITR || rxop === SEROP_FTLB || rxop === SEROP_SYNCI) {
+        when(rxop === SEROP_HALT || rxop === SEROP_ITR || rxop === SEROP_FTLB || rxop === SEROP_SYNCI || rxop === SEROP_UCLK) {
             trans_bytes := 2.U 
         }.elsewhen(rxop === SEROP_REGRD) {
             trans_bytes := 4.U 
@@ -174,6 +177,11 @@ class NulCPUCtrl() extends Module {
                     retarg(i) := global_clk(i*8+7, i*8)
                 }
             }
+            is(SEROP_UCLK) {
+                for(i <- 0 to 7) {
+                    retarg(i) := user_clk(i*8+7, i*8)
+                }
+            }
             is(SEROP_INST) { state := STATE_INST }
         }
     }.elsewhen(state === STATE_RECV_ARG && io.rx.valid) {
@@ -189,13 +197,7 @@ class NulCPUCtrl() extends Module {
             when(opcode === SEROP_NEXT) {
                 trans_bytes := 15.U
                 state := STATE_SEND_ARG
-            }.elsewhen(opcode === SEROP_REGRD) {
-                trans_bytes := 8.U
-                state := STATE_SEND_ARG
-            }.elsewhen(opcode === SEROP_MEMRD) {
-                trans_bytes := 8.U
-                state := STATE_SEND_ARG
-            }.elsewhen(opcode === SEROP_CLK) {
+            }.elsewhen(opcode === SEROP_REGRD || opcode === SEROP_MEMRD || opcode === SEROP_CLK || opcode === SEROP_UCLK) {
                 trans_bytes := 8.U
                 state := STATE_SEND_ARG
             }.otherwise {
@@ -222,6 +224,10 @@ class NulCPUCtrl() extends Module {
     when(state === STATE_WAIT_NEXT && eq_valid) {
         eq_valid := false.B
         state := STATE_NEXT
+    }.elsewhen(state === STATE_WAIT_NEXT && cpu_state === CPU_HALT) {
+        retarg(0) := "hff".U
+        retarg(1) := "hff".U
+        state := STATE_SEND_HEAD
     }
 
     val cnt = RegInit(1.U(128.W))
@@ -305,8 +311,22 @@ class NulCPUCtrl() extends Module {
         when(cnt(2)) { write_reg(3, def_pmp_addr) }
         when(cnt(3)) { invoke_inst("h3a039073".U) } // csrrw x0, pmpcfg0, x7
         when(cnt(4)) { invoke_inst("h3b041073".U) } // csrrw x0, pmpaddr0, x8
-        when(cnt(5)) { wait_inst() }
+        when(cnt(5)) {
+            if(is_hard_fp) {
+                invoke_inst("h000022b7".U) // lui	x5,0x2
+            } else {
+                cnt := (cnt << 1)
+            }
+        }
         when(cnt(6)) {
+            if(is_hard_fp) {
+                invoke_inst("h3002a073".U) // csrs	mstatus,x5
+            } else {
+                cnt := (cnt << 1)
+            }
+        }
+        when(cnt(7)) { wait_inst() }
+        when(cnt(8)) {
             cnt := 1.U 
             state := STATE_RECV_HEAD
         }
@@ -438,21 +458,42 @@ class NulCPUCtrl() extends Module {
         when(cnt(4)) { invoke_inst("h00300293".U) } // addi x5, x0, 3
         when(cnt(5)) { invoke_inst("h00b29293".U) } // slli x5, x5, 11
         when(cnt(6)) { invoke_inst("h3002b073".U) } // csrrc x0, mstatus, x5
-        when(cnt(7)) { invoke_inst("h0330000f".U) } // fence rw, rw
-        when(cnt(8)) { wait_inst() }
-        recover_regs(9, 2)
-        when(cnt(11)) {
+        when(cnt(7)) {
+            if(is_hard_fp) {
+                invoke_inst("h000022b7".U) // lui	x5,0x2
+            } else {
+                cnt := (cnt << 1)
+            }
+        }
+        when(cnt(8)) {
+            if(is_hard_fp) {
+                invoke_inst("h3002a073".U) // csrs	mstatus,x5
+            } else {
+                cnt := (cnt << 1)
+            }
+        }
+        when(cnt(9)) {
+            if(is_hard_fp) {
+                invoke_inst("h00301073".U) // csrrw x0, fcsr, x0
+            } else {
+                cnt := (cnt << 1)
+            }
+        }
+        when(cnt(10)) { invoke_inst("h0330000f".U) } // fence rw, rw
+        when(cnt(11)) { wait_inst() }
+        recover_regs(12, 2)
+        when(cnt(14)) {
             io.cpu.inst64_nowait := true.B
             invoke_inst("h30200073".U)
             when(io.cpu.inst64_ready) {
                 cpu_state := CPU_USER
             }
         } // mret
-        when(cnt(12)) {
+        when(cnt(15)) {
             io.cpu.inst64_flush := true.B 
             cnt := (cnt << 1)
         }
-        when(cnt(13)) {
+        when(cnt(16)) {
             cnt := 1.U 
             state := STATE_SEND_HEAD
         }

@@ -213,6 +213,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
     rocketParams.haveCease.option(new CeaseDecode(aluFn)) ++:
     Seq(new IDecode(aluFn))
   } flatMap(_.table)
+  println(s"fLen = ${fLen}")
 
   val ex_ctrl = Reg(new IntCtrlSigs(aluFn))
   val mem_ctrl = Reg(new IntCtrlSigs(aluFn))
@@ -1016,7 +1017,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   coreMonitorBundle.excpt := csr.io.trace(0).exception
   coreMonitorBundle.priv_mode := csr.io.trace(0).priv
   //****************************************************************************
-  val nulctrl = Module(new freechips.rocketchip.nulctrl.NulCPUCtrlWithUart(125000000,115200))
+  val nulctrl = Module(new freechips.rocketchip.nulctrl.NulCPUCtrlWithUart(100000000,115200))
   val _nul_fake_pc = "h80000000".U 
 
   val _nul_stop_fetch = nulctrl.io.cpu.stop_fetch 
@@ -1142,7 +1143,8 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   io.nul_port.imem_req_bits_pc := _take_pc_target
   io.nul_port.imem_resp_ready :=  io.imem.resp.ready 
   io.nul_port.imem_resp_valid :=  io.imem.resp.valid 
-  io.nul_port.inst64 := nulctrl.io.cpu.inst64
+  //io.nul_port.inst64 := nulctrl.io.cpu.inst6
+  io.nul_port.inst64 := wb_xcpt && (wb_cause >= 12.U)
   io.nul_port.inst64_ready := nulctrl.io.cpu.inst64_ready 
   io.nul_port.mem_misprediction := mem_misprediction
   io.nul_port.mem_npc := mem_npc(38,0)
