@@ -164,8 +164,8 @@ trait HasCoreIO extends HasTileParameters {
   val io = new CoreBundle()(p) {
     val hartid = UInt(hartIdLen.W).asInput
     val reset_vector = UInt(resetVectorLen.W).asInput
-    val nulrxd = Input(Bool())
-    val nultxd = Output(Bool())
+    //val nulrxd = Input(Bool())
+    //val nultxd = Output(Bool())
     val nulctrl = new freechips.rocketchip.nulctrl.NulCPUBundle().flip
     val nul_port = Output(new freechips.rocketchip.nulctrl.nul_port)
     val interrupts = new CoreInterrupts().asInput

@@ -1017,10 +1017,10 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   coreMonitorBundle.excpt := csr.io.trace(0).exception
   coreMonitorBundle.priv_mode := csr.io.trace(0).priv
   //****************************************************************************
-  val nulctrl = Module(new freechips.rocketchip.nulctrl.NulCPUCtrlWithUart(100000000,460800))
+  //val nulctrl = Module(new freechips.rocketchip.nulctrl.NulCPUCtrlWithUart(100000000,460800))
   val _nul_fake_pc = "h80000000".U 
-dontTouch(io.nulctrl)
-  val _nul_stop_fetch = nulctrl.io.cpu.stop_fetch 
+  dontTouch(io.nulctrl)
+  val _nul_stop_fetch = io.nulctrl.stop_fetch //nulctrl.io.cpu.stop_fetch 
 
   val _nul_invoke_valid = RegInit(false.B) 
   val _nul_invoke_inst = RegInit(0.U(32.W))
@@ -1029,11 +1029,11 @@ dontTouch(io.nulctrl)
   val _nul_invoke_working = RegInit(false.B)
   val _nul_invoke_finish = RegInit(false.B)
 
-  when(!_nul_invoke_working && nulctrl.io.cpu.inst64 && (!_nul_invoke_finish)) {
+  when(!_nul_invoke_working && io.nulctrl.inst64 /* nulctrl.io.cpu.inst64*/ && (!_nul_invoke_finish)) {
     _nul_invoke_working := true.B 
     _nul_invoke_valid := true.B 
-    _nul_invoke_inst := nulctrl.io.cpu.inst64_raw 
-    _nul_invoke_nowait := nulctrl.io.cpu.inst64_nowait 
+    _nul_invoke_inst := io.nulctrl.inst64_raw //nulctrl.io.cpu.inst64_raw 
+    _nul_invoke_nowait := io.nulctrl.inst64_nowait //nulctrl.io.cpu.inst64_nowait 
   }
 
   val _take_pc_target = Mux(wb_xcpt || csr.io.eret, csr.io.evec, // exception or [m|s]ret
@@ -1055,12 +1055,12 @@ dontTouch(io.nulctrl)
     _nul_invoke_working := false.B 
   }
 
-  nulctrl.io.cpu.inst64_ready := _nul_invoke_finish
+  /*nulctrl.io.cpu.inst64_ready*/ io.nulctrl.inst64_ready := _nul_invoke_finish
   when(_nul_invoke_finish) {
     _nul_invoke_finish := false.B
   }
 
-  nulctrl.io.cpu.inst64_busy := _nul_pipeline_busy
+  /*nulctrl.io.cpu.inst64_busy*/ io.nulctrl.inst64_busy := _nul_pipeline_busy
 
 
   
@@ -1086,19 +1086,19 @@ dontTouch(io.nulctrl)
 
   //nulctrl.io.cpu.priv := csr.io.status.prv
   //nulctrl.io.cpu.priv := Mux((io.imem._nul_curpc < "h10000000".U) || (io.imem._nul_curpc >= "h80000000".U), csr.io.status.prv, 0.U)
-  nulctrl.io.cpu.priv := csr.io.status.prv
-  nulctrl.io.cpu.inited := io.imem._nul_curpc >= "h80000000".U
+  /*nulctrl.io.cpu.priv*/ io.nulctrl.priv := csr.io.status.prv
+  /*nulctrl.io.cpu.inited*/ io.nulctrl.inited := io.imem._nul_curpc >= "h80000000".U
 
-  nulctrl.io.cpu.regacc_rdata := 0.U
-  nulctrl.io.cpu.regacc_busy := false.B
-  when(nulctrl.io.cpu.regacc_wt) {
-    rf.write(nulctrl.io.cpu.regacc_idx, nulctrl.io.cpu.regacc_wdata)
-  }.elsewhen(nulctrl.io.cpu.regacc_rd){
-    nulctrl.io.cpu.regacc_rdata := rf.aux_read(nulctrl.io.cpu.regacc_idx)
+  /*nulctrl.io.cpu.regacc_rdata*/ io.nulctrl.regacc_rdata  := 0.U
+  /*nulctrl.io.cpu.regacc_busy*/ io.nulctrl.regacc_busy := false.B
+  when(/*nulctrl.io.cpu.regacc_wt*/ io.nulctrl.regacc_wt ) {
+    rf.write(/*nulctrl.io.cpu.regacc_idx*/ io.nulctrl.regacc_idx, /*nulctrl.io.cpu.regacc_wdata*/io.nulctrl.regacc_wdata)
+  }.elsewhen(/*nulctrl.io.cpu.regacc_rd*/io.nulctrl.regacc_rd){
+    /*nulctrl.io.cpu.regacc_rdata*/ io.nulctrl.regacc_rdata  := rf.aux_read( io.nulctrl.regacc_idx /*nulctrl.io.cpu.regacc_idx*/)
   }
-
-  nulctrl.io.rxd := io.nulrxd
-  io.nultxd := nulctrl.io.txd
+  //////////////////////////////////////////////////////
+  //nulctrl.io.rxd := io.nulrxd
+  //io.nultxd := nulctrl.io.txd
 
   //****************************************************************************
   io.nul_port.ibuf_io_imem_valid := ibuf.io.imem.valid
@@ -1145,7 +1145,7 @@ dontTouch(io.nulctrl)
   io.nul_port.imem_resp_valid :=  io.imem.resp.valid 
   //io.nul_port.inst64 := nulctrl.io.cpu.inst6
   io.nul_port.inst64 := wb_xcpt && (wb_cause >= 12.U)
-  io.nul_port.inst64_ready := nulctrl.io.cpu.inst64_ready 
+  io.nul_port.inst64_ready := io.nulctrl.inst64_ready //nulctrl.io.cpu.inst64_ready 
   io.nul_port.mem_misprediction := mem_misprediction
   io.nul_port.mem_npc := mem_npc(38,0)
   io.nul_port.mem_reg_inst := mem_reg_inst(31,0)
