@@ -1143,8 +1143,8 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   io.nul_port.imem_req_bits_pc := _take_pc_target
   io.nul_port.imem_resp_ready :=  io.imem.resp.ready 
   io.nul_port.imem_resp_valid :=  io.imem.resp.valid 
-  //io.nul_port.inst64 := nulctrl.io.cpu.inst6
-  io.nul_port.inst64 := wb_xcpt && (wb_cause >= 12.U)
+  io.nul_port.inst64 := io.nulctrl.inst64
+  //io.nul_port.inst64 := wb_xcpt && (wb_cause >= 12.U)
   io.nul_port.inst64_ready := io.nulctrl.inst64_ready //nulctrl.io.cpu.inst64_ready 
   io.nul_port.mem_misprediction := mem_misprediction
   io.nul_port.mem_npc := mem_npc(38,0)
