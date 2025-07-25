@@ -43,4 +43,10 @@ class RocketSubsystemModuleImp[+L <: RocketSubsystem](_outer: L) extends BaseSub
       val nul_portIO = outer.nul_portNexus.in.map(_._1)
       val nul_port = IO(Output(new freechips.rocketchip.nulctrl.nul_port))
       nul_port := nul_portIO(0)
+      val nul_port1 = IO(Output(new freechips.rocketchip.nulctrl.nul_port))
+      nul_port1 := nul_portIO(1)
+      val nul_port2 = IO(Output(new freechips.rocketchip.nulctrl.nul_port))
+      nul_port2 := nul_portIO(2)
+      val nul_port3 = IO(Output(new freechips.rocketchip.nulctrl.nul_port))
+      nul_port3 := nul_portIO(3)
     }

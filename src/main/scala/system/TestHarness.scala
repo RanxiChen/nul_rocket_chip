@@ -15,9 +15,9 @@ class TestHarness()(implicit p: Parameters) extends Module {
 
   val ldut = LazyModule(new ExampleRocketSystem)
   val dut = Module(ldut.module)
-
   // Allow the debug ndreset to reset the dut, but not until the initial reset has completed
   dut.reset := (reset.asBool | ldut.debug.map { debug => AsyncResetReg(debug.ndreset) }.getOrElse(false.B)).asBool
+  //dut.nul_portIO.map(dontTouch(_))
 
   dut.dontTouchPorts()
   dut.tieOffInterrupts()
